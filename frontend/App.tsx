@@ -11,17 +11,18 @@ import {
 } from './services/agentPipeline.ts';
 
 const SAMPLE_SCRIPT = `EXT. DOWNTOWN BANK - DAY
-A sleek black van idles outside the First National Bank. Rain pours down heavily, creating puddles on the asphalt.
-JOHN (40s, tense, wearing a cheap suit) checks his watch. He taps the steering wheel rhythmically.
+A sleek black production van idles outside the First National Bank. Heavy rain pours down, creating deep puddles on the asphalt.
+JOHN (40s, tense) checks his watch. He taps the steering wheel rhythmically.
 
-INT. BANK LOBBY - CONTINUOUS
-SARAH (30s, calm, wearing a trench coat) walks up to the teller. The bank is crowded with Friday afternoon customers.
+INT. DOWNTOWN BANK LOBBY - CONTINUOUS
+SARAH (30s, calm) walks up to the teller. The bank is crowded with Friday afternoon customers.
 She slides a handwritten note across the marble counter.
 The TELLER (20s, nervous) reads it. His eyes widen. 
 Sarah subtly opens her coat, revealing a futuristic, glowing prop blaster strapped to her side.
 
-EXT. DOWNTOWN BANK - LATER
-Police sirens wail in the distance. John slams the van into gear.`;
+EXT. DOWNTOWN BANK - NIGHT
+The rain has turned into a torrential downpour. Police sirens wail in the distance. 
+John slams the van into gear. Sarah dives into the passenger seat as the van executes a dangerous high-speed driving stunt, peeling out into the dark, wet city streets.`;
 
 const INITIAL_STATE: PipelineState = {
   scriptAnalyst: { status: 'idle', data: null },
