@@ -23,6 +23,9 @@ export interface ResearchItem {
   query: string;
   simulatedFindings: string;
   relevance: string;
+  sourceUrl: string;
+  excerpt: string;
+  timestamp: string;
 }
 
 export interface ShootDay {
@@ -45,6 +48,9 @@ export interface ChangedFact {
   topic: string;
   previousFinding: string;
   newFinding: string;
+  sourceUrl: string;
+  excerpt: string;
+  timestamp: string;
   affectedScenes: string[];
 }
 
