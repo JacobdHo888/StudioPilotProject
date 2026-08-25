@@ -321,9 +321,29 @@ export const ResultsDashboard: React.FC<Props> = ({ state, error, onRecheck }) =
                       </div>
                       <p className="text-xs text-amber-400 font-medium bg-amber-400/10 inline-block px-2 py-1 rounded border border-amber-400/20">Impact: {item.relevance}</p>
                     </div>
-                    <div className="md:w-2/3 bg-cinema-800/30 p-4 rounded-lg border-l-2 border-blue-500">
+                    <div className="md:w-2/3 bg-cinema-800/30 p-4 rounded-lg border-l-2 border-blue-500 flex flex-col">
                       <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-2 flex items-center"><Search className="w-3 h-3 mr-1.5"/> Verified Findings</p>
-                      <p className="text-sm text-gray-300 leading-relaxed">{item.simulatedFindings}</p>
+                      <p className="text-sm text-gray-300 leading-relaxed mb-4">{item.simulatedFindings}</p>
+                      
+                      {/* Source Attribution */}
+                      <div className="mt-auto bg-cinema-900/50 p-3 rounded border border-cinema-700/50">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold flex items-center">
+                            <LinkIcon className="w-3 h-3 mr-1" /> Source
+                          </span>
+                          <span className="text-[10px] text-gray-500 font-mono flex items-center">
+                            <Clock className="w-3 h-3 mr-1" /> {item.timestamp ? new Date(item.timestamp).toLocaleString() : 'N/A'}
+                          </span>
+                        </div>
+                        {item.sourceUrl && (
+                          <a href={item.sourceUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-400 hover:underline truncate block mb-2">
+                            {item.sourceUrl}
+                          </a>
+                        )}
+                        {item.excerpt && (
+                          <p className="text-xs text-gray-400 italic border-l-2 border-cinema-600 pl-2">"{item.excerpt}"</p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -466,7 +486,26 @@ export const ResultsDashboard: React.FC<Props> = ({ state, error, onRecheck }) =
                           <span className="text-[10px] text-rose-400 uppercase tracking-wider font-bold flex items-center mb-2">
                             <AlertCircle className="w-3 h-3 mr-1"/> New Reality
                           </span>
-                          <p className="text-sm text-gray-200 font-medium">{fact.newFinding}</p>
+                          <p className="text-sm text-gray-200 font-medium mb-3">{fact.newFinding}</p>
+                          
+                          {fact.sourceUrl && (
+                            <div className="bg-cinema-900/50 p-2.5 rounded border border-rose-500/20">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold flex items-center">
+                                  <LinkIcon className="w-3 h-3 mr-1" /> Source
+                                </span>
+                                <span className="text-[10px] text-gray-500 font-mono">
+                                  {fact.timestamp ? new Date(fact.timestamp).toLocaleTimeString() : 'N/A'}
+                                </span>
+                              </div>
+                              <a href={fact.sourceUrl} target="_blank" rel="noreferrer" className="text-[10px] text-blue-400 hover:underline truncate block mb-1.5">
+                                {fact.sourceUrl}
+                              </a>
+                              {fact.excerpt && (
+                                <p className="text-[10px] text-gray-400 italic border-l-2 border-rose-500/30 pl-2">"{fact.excerpt}"</p>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
