@@ -10,19 +10,18 @@ import {
   runChangeMonitor 
 } from './services/agentPipeline.ts';
 
-const SAMPLE_SCRIPT = `EXT. DOWNTOWN BANK - DAY
-A sleek black production van idles outside the First National Bank. Heavy rain pours down, creating deep puddles on the asphalt.
-JOHN (40s, tense) checks his watch. He taps the steering wheel rhythmically.
+// Entirely original demo screenplay created for this hackathon.
+const SAMPLE_SCRIPT = `EXT. GRIFFITH OBSERVATORY - NIGHT
+Heavy rain lashes against the iconic white domes. ELARA (30s, sharp, wearing a leather jacket) sits astride a vintage motorcycle, engine idling. She watches the entrance like a hawk.
 
-INT. DOWNTOWN BANK LOBBY - CONTINUOUS
-SARAH (30s, calm) walks up to the teller. The bank is crowded with Friday afternoon customers.
-She slides a handwritten note across the marble counter.
-The TELLER (20s, nervous) reads it. His eyes widen. 
-Sarah subtly opens her coat, revealing a futuristic, glowing prop blaster strapped to her side.
+INT. OBSERVATORY PLANETARIUM - CONTINUOUS
+KAEL (50s, anxious) paces beneath the star projector. He clutches a titanium lockbox. 
+Elara enters, dripping wet. She nods. Kael slides the lockbox across the carpet.
 
-EXT. DOWNTOWN BANK - NIGHT
-The rain has turned into a torrential downpour. Police sirens wail in the distance. 
-John slams the van into gear. Sarah dives into the passenger seat as the van executes a dangerous high-speed driving stunt, peeling out into the dark, wet city streets.`;
+EXT. OBSERVATORY ROOFTOP - LATER
+The rain is torrential now. Elara sprints across the roof with the lockbox. 
+Suddenly, a massive heavy-lift drone rises over the parapet, its spotlight blinding her. 
+Elara executes a desperate diving stunt to avoid the drone's grappling hook, sliding across the slick, wet concrete.`;
 
 const INITIAL_STATE: PipelineState = {
   scriptAnalyst: { status: 'idle', data: null },
