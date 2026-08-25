@@ -110,26 +110,53 @@ export const runScriptAnalyst = async (scriptInput: string | FileData): Promise<
 
 /**
  * Simulates the Parallel Search API response based on the query.
+ * Returns a JSON string containing the result, source URL, excerpt, and timestamp.
  */
 function simulateParallelSearch(query: string, category: string, isRecheck: boolean = false): string {
   if (!query) throw new Error("Empty search query provided.");
   
   const q = query.toLowerCase();
-  if (q.includes('bank') || q.includes('downtown')) {
-    if (isRecheck) return "URGENT UPDATE: Downtown bank location has revoked all commercial filming permits for the next 30 days due to a recent security incident.";
-    return "Parallel Search Result: Downtown bank locations require a 'Commercial Filming Permit' (Form 4B). Minimum 14 days processing time. Police detail required for exterior shots involving weapons.";
+  const timestamp = new Date().toISOString();
+  
+  let result = "";
+  let url = "";
+  let excerpt = "";
+  
+  if (q.includes('griffith') || q.includes('observatory')) {
+    if (isRecheck) {
+      result = "URGENT UPDATE: Griffith Observatory has suspended all exterior filming permits for the upcoming month due to emergency structural repairs on the main terrace.";
+      url = "https://laparks.org/griffith/filming-updates";
+      excerpt = "...effective immediately, all exterior commercial filming permits are suspended for 30 days due to terrace structural repairs...";
+    } else {
+      result = "Filming at Griffith Observatory requires a special 'City Park Film Permit'. Minimum 21 days notice. Night shoots require additional neighborhood noise variances.";
+      url = "https://film.lacity.org/griffith-observatory-guidelines";
+      excerpt = "...requires a City Park Film Permit with a minimum 21-day advance notice. Night filming (after 10 PM) mandates neighborhood noise variances...";
+    }
+  } else if (q.includes('weather') || q.includes('rain') || category === 'WEATHER') {
+    if (isRecheck) {
+      result = "URGENT UPDATE: National Weather Service has upgraded the forecast to a severe thunderstorm warning with high lightning risk. All elevated exterior filming (rooftops) must be grounded.";
+      url = "https://weather.gov/alerts/ca-los-angeles";
+      excerpt = "...SEVERE THUNDERSTORM WARNING IN EFFECT. High risk of lightning strikes. All elevated outdoor activities must be grounded immediately...";
+    } else {
+      result = "Historical weather data indicates a 70% chance of precipitation. Rain towers may not be needed, but electrical safety protocols for wet conditions must be enforced.";
+      url = "https://weather.com/past/los-angeles/april";
+      excerpt = "...historical averages for April show a 70% chance of precipitation. Wet-weather electrical safety protocols apply...";
+    }
+  } else if (q.includes('drone') || q.includes('heavy-lift')) {
+    result = "Heavy-lift drones require an FAA Part 107 certified pilot and a closed-set perimeter of 500 feet. Cannot fly directly over unprotected cast/crew.";
+    url = "https://faa.gov/uas/commercial_operators/filming";
+    excerpt = "...heavy-lift UAS operations require Part 107 certification and a strict 500-foot closed-set perimeter. Flights over unprotected persons are strictly prohibited...";
+  } else if (q.includes('motorcycle') || q.includes('vehicle') || q.includes('stunt')) {
+    result = "Vintage motorcycles require a specialized picture car mechanic on set. Stunt riding requires a wet-down permit if streets are artificially wetted.";
+    url = "https://sagaftra.org/stunt-safety-vehicles";
+    excerpt = "...use of vintage or modified motorcycles requires a dedicated picture car mechanic. Artificial wet-downs for stunts require municipal water permits...";
+  } else {
+    result = `Standard filming regulations apply for '${query}'. No extraordinary restrictions found.`;
+    url = "https://filmla.com/general-guidelines";
+    excerpt = "...standard commercial filming guidelines apply...";
   }
-  if (q.includes('weather') || q.includes('rain') || category === 'WEATHER') {
-    if (isRecheck) return "URGENT UPDATE: Severe thunderstorm and flash flood warning issued for the region covering the planned shoot dates. All exterior filming is highly discouraged.";
-    return "Parallel Search Result: Historical weather data for this region shows a 60% chance of heavy rain in April. Recommend weather-sealed equipment and backup indoor cover sets.";
-  }
-  if (q.includes('weapon') || q.includes('blaster') || q.includes('gun')) {
-    return "Parallel Search Result: Prop weapons must be inspected by a licensed set armorer. Local ordinances prohibit brandishing realistic prop weapons in public view without prior neighborhood notification.";
-  }
-  if (q.includes('van') || q.includes('vehicle') || q.includes('driving')) {
-    return "Parallel Search Result: Intermittent Traffic Control (ITC) permit required for driving shots. Max hold time is 3 minutes per take.";
-  }
-  return `Parallel Search Result: Standard filming regulations apply for '${query}'. No extraordinary restrictions found.`;
+  
+  return JSON.stringify({ result, sourceUrl: url, excerpt, timestamp }, null, 2);
 }
 
 /**
@@ -157,17 +184,17 @@ export const runResearchAgent = async (
       s.setting.toUpperCase().includes('EXT') ||
       s.locations.some(l => !l.toUpperCase().includes('INT.')) ||
       s.specialRequirements.length > 0 ||
-      s.props.some(p => p.toLowerCase().includes('weapon') || p.toLowerCase().includes('vehicle') || p.toLowerCase().includes('car'))
+      s.props.some(p => p.toLowerCase().includes('weapon') || p.toLowerCase().includes('vehicle') || p.toLowerCase().includes('car') || p.toLowerCase().includes('drone'))
     );
 
     const systemInstruction = `You are a Production Research Agent.
 EXPLICIT RULES FOR RESEARCH:
 1. ALWAYS search for real-world locations to check permit rules or restrictions.
 2. ALWAYS search for historical weather data if the scene is EXT (exterior).
-3. ALWAYS search for specialty equipment (e.g., cranes, prop weapons, specialized vehicles).
+3. ALWAYS search for specialty equipment (e.g., cranes, prop weapons, specialized vehicles, drones).
 4. DO NOT search for generic indoor sets (e.g., 'INT. BEDROOM') or common everyday props.
 
-You must use the parallelSearch tool to gather this information.`;
+You must use the parallelSearch tool to gather this information. The tool returns a JSON string containing the result, sourceUrl, excerpt, and timestamp.`;
 
     let contents: any[] = [
       {
@@ -207,7 +234,7 @@ You must use the parallelSearch tool to gather this information.`;
           try {
             result = simulateParallelSearch(query, category, false);
           } catch (err) {
-            result = `Search failed: ${err instanceof Error ? err.message : 'Unknown error'}`;
+            result = JSON.stringify({ error: err instanceof Error ? err.message : 'Unknown error' });
           }
 
           onSearchLog({
@@ -236,7 +263,7 @@ You must use the parallelSearch tool to gather this information.`;
       model: MODEL_NAME,
       contents: finalContents,
       config: {
-        systemInstruction: systemInstruction + "\n\nNow, summarize your findings into the final JSON array format. If no research was needed or found, return an empty array [].",
+        systemInstruction: systemInstruction + "\n\nNow, summarize your findings into the final JSON array format. Extract the sourceUrl, excerpt, and timestamp from the tool's JSON response. If no research was needed or found, return an empty array [].",
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.ARRAY,
@@ -247,8 +274,11 @@ You must use the parallelSearch tool to gather this information.`;
               query: { type: Type.STRING, description: "The search query used" },
               simulatedFindings: { type: Type.STRING, description: "The result of the search" },
               relevance: { type: Type.STRING, description: "Why this matters to the production" },
+              sourceUrl: { type: Type.STRING, description: "The URL of the source" },
+              excerpt: { type: Type.STRING, description: "A short excerpt from the source" },
+              timestamp: { type: Type.STRING, description: "The timestamp of the retrieval" }
             },
-            required: ["topic", "query", "simulatedFindings", "relevance"]
+            required: ["topic", "query", "simulatedFindings", "relevance", "sourceUrl", "excerpt", "timestamp"]
           }
         }
       }
@@ -370,15 +400,15 @@ export const runChangeMonitor = async (
       throw new Error("No previous research found in storage to compare against.");
     }
     const previousResearch: ResearchItem[] = JSON.parse(storedResearch);
-    const changedFacts: any[] = [];
+    const recheckResults: any[] = [];
 
-    // 2. Re-run searches and diff
+    // 2. Re-run searches
     for (const item of previousResearch) {
       let newResult = "";
       try {
         newResult = simulateParallelSearch(item.query, 'RECHECK', true);
       } catch (err) {
-        newResult = `Search failed: ${err instanceof Error ? err.message : 'Unknown error'}`;
+        newResult = JSON.stringify({ error: err instanceof Error ? err.message : 'Unknown error' });
       }
       
       onSearchLog({
@@ -388,31 +418,19 @@ export const runChangeMonitor = async (
         timestamp: Date.now()
       });
 
-      if (newResult !== item.simulatedFindings) {
-        changedFacts.push({
-          topic: item.topic,
-          previousFinding: item.simulatedFindings,
-          newFinding: newResult
-        });
-      }
+      recheckResults.push({
+        topic: item.topic,
+        previousResearch: item,
+        newRawSearchResult: newResult
+      });
     }
 
-    // 3. If no changes, return early
-    if (changedFacts.length === 0) {
-      return {
-        changeReason: "Re-ran all research queries. No changes detected in real-world constraints.",
-        changedFacts: [],
-        updatedPlan: plan,
-        newRisks: risks
-      };
-    }
-
-    // 4. If changes exist, ask Gemini to evaluate impact and update plan
+    // 3. Ask Gemini to evaluate impact and update plan
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: `The following real-world facts have changed since the production plan was created:\n${JSON.stringify(changedFacts, null, 2)}\n\nCurrent Plan:\n${JSON.stringify(plan)}\n\nCurrent Risks:\n${JSON.stringify(risks)}\n\nScenes:\n${JSON.stringify(scenes)}`,
+      contents: `The following are the previous research findings and the NEW raw search results just retrieved:\n${JSON.stringify(recheckResults, null, 2)}\n\nCurrent Plan:\n${JSON.stringify(plan)}\n\nCurrent Risks:\n${JSON.stringify(risks)}\n\nScenes:\n${JSON.stringify(scenes)}`,
       config: {
-        systemInstruction: "You are a Change Monitor. Evaluate the impact of the changed facts on the Current Plan. Generate an updated plan that accommodates these changes (e.g., moving exterior scenes, changing locations). Identify new risks caused by these changes. Also, explicitly list the changed facts and which scenes they affect.",
+        systemInstruction: "You are a Change Monitor. Compare the 'previousResearch' with the 'newRawSearchResult' for each topic. If the core facts have changed, add it to 'changedFacts' and evaluate the impact on the Current Plan. Generate an updated plan that accommodates these changes (e.g., moving exterior scenes, changing locations). Identify new risks caused by these changes. Extract the sourceUrl, excerpt, and timestamp from the newRawSearchResult JSON. If NO facts changed, return an empty 'changedFacts' array and keep the plan the same.",
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -426,9 +444,12 @@ export const runChangeMonitor = async (
                   topic: { type: Type.STRING },
                   previousFinding: { type: Type.STRING },
                   newFinding: { type: Type.STRING },
+                  sourceUrl: { type: Type.STRING },
+                  excerpt: { type: Type.STRING },
+                  timestamp: { type: Type.STRING },
                   affectedScenes: { type: Type.ARRAY, items: { type: Type.STRING } }
                 },
-                required: ["topic", "previousFinding", "newFinding", "affectedScenes"]
+                required: ["topic", "previousFinding", "newFinding", "sourceUrl", "excerpt", "timestamp", "affectedScenes"]
               }
             },
             updatedPlan: {
