@@ -36,12 +36,16 @@ export interface ShootDay {
   notes: string;
 }
 
+export type RiskStatus = 'Open' | 'In Progress' | 'Resolved';
+
 export interface Risk {
   id: string;
   description: string;
   severity: 'Low' | 'Medium' | 'High';
   mitigation: string;
   affectedScenes: string[];
+  status: RiskStatus;
+  resolutionNote?: string;
 }
 
 export interface ChangedFact {
@@ -60,7 +64,8 @@ export interface ChangeReport {
   changeReason: string;
   changedFacts: ChangedFact[];
   updatedPlan: ShootDay[];
-  newRisks: Risk[];
+  updatedRisks: Risk[];
+  newOrReopenedRisks: Risk[];
 }
 
 export type AgentStatus = 'idle' | 'running' | 'completed' | 'error';
@@ -71,7 +76,6 @@ export interface PipelineState {
   productionPlanner: { status: AgentStatus; data: ShootDay[] | null; error?: string };
   riskAnalyst: { status: AgentStatus; data: Risk[] | null; error?: string };
   changeMonitor: { status: AgentStatus; data: ChangeReport | null; history: ChangeReport[]; error?: string };
-  locationVisualizer: { status: AgentStatus; data: Record<string, string> | null; error?: string };
 }
 
 export interface FileData {
