@@ -26,6 +26,7 @@ export interface ResearchItem {
   sourceUrl: string;
   excerpt: string;
   timestamp: string;
+  status: 'success' | 'timeout' | 'error';
 }
 
 export interface ShootDay {
