@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type, FunctionDeclaration } from '@google/genai';
+import { GoogleGenAI, Type, FunctionDeclaration, Modality } from '@google/genai';
 import { Scene, ResearchItem, ShootDay, Risk, ChangeReport, FileData, SearchLog } from '../types.ts';
 
 // Initialize the SDK. API_KEY must be provided by the environment.
@@ -496,4 +496,41 @@ export const runChangeMonitor = async (
       throw new Error("Failed to parse JSON response from Change Monitor");
     }
   });
+};
+
+/**
+ * Agent 6: Location Visualizer (Imagen 3)
+ * Generates concept art for extracted locations.
+ * Isolated to prevent blocking the core pipeline.
+ */
+export const runLocationVisualizer = async (locations: string[]): Promise<Record<string, string>> => {
+  const results: Record<string, string> = {};
+  
+  // Limit to 4 locations to avoid rate limits during demo
+  const locationsToGenerate = locations.slice(0, 4);
+  
+  await Promise.all(locationsToGenerate.map(async (loc) => {
+    try {
+      const response = await withRetry(async () => {
+        return await ai.models.generateContent({
+          model: 'gemini-3.1-flash-image',
+          contents: `Cinematic concept art for a film location: ${loc}. Highly detailed, moody lighting, 8k resolution, masterpiece, empty set.`,
+          config: {
+            responseModalities: [Modality.IMAGE],
+          },
+        });
+      }, 2, 1000, 30000);
+
+      for (const part of response.candidates?.[0]?.content?.parts || []) {
+        if (part.inlineData) {
+          results[loc] = `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`;
+          break;
+        }
+      }
+    } catch (err) {
+      console.error(`Failed to generate image for ${loc}:`, err);
+    }
+  }));
+
+  return results;
 };
