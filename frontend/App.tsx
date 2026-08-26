@@ -1,14 +1,13 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Play, Film, Settings, Info, Loader2, Upload, File as FileIcon, X, Activity, Terminal } from 'lucide-react';
-import { PipelineState, FileData, SearchLog, ActivityLog } from './types.ts';
+import { PipelineState, FileData, SearchLog, ActivityLog, RiskStatus } from './types.ts';
 import { ResultsDashboard } from './components/ResultsDashboard.tsx';
 import { 
   runScriptAnalyst, 
   runResearchAgent, 
   runProductionPlanner, 
   runRiskAnalyst, 
-  runChangeMonitor,
-  runLocationVisualizer
+  runChangeMonitor
 } from './services/agentPipeline.ts';
 
 // Entirely original demo screenplay created for this hackathon.
@@ -30,7 +29,6 @@ const INITIAL_STATE: PipelineState = {
   productionPlanner: { status: 'idle', data: null },
   riskAnalyst: { status: 'idle', data: null },
   changeMonitor: { status: 'idle', data: null, history: [] },
-  locationVisualizer: { status: 'idle', data: null },
 };
 
 export default function App() {
@@ -40,8 +38,33 @@ export default function App() {
   const [isRunning, setIsRunning] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
+
+  // Load state on mount
+  useEffect(() => {
+    const savedState = localStorage.getItem('studiopilot_state');
+    if (savedState) {
+      try {
+        const parsed = JSON.parse(savedState);
+        if (parsed.pipelineState) setPipelineState(parsed.pipelineState);
+        if (parsed.activityLogs) {
+          setActivityLogs(parsed.activityLogs.map((l: any) => ({...l, timestamp: new Date(l.timestamp)})));
+        }
+      } catch (e) {
+        console.error("Failed to restore state", e);
+      }
+    }
+    setIsLoaded(true);
+  }, []);
+
+  // Save state on change
+  useEffect(() => {
+    if (isLoaded) {
+      localStorage.setItem('studiopilot_state', JSON.stringify({ pipelineState, activityLogs }));
+    }
+  }, [pipelineState, activityLogs, isLoaded]);
 
   const addLog = useCallback((agent: string, message: string, type: ActivityLog['type'] = 'info') => {
     setActivityLogs(prev => [...prev, {
@@ -116,6 +139,19 @@ export default function App() {
     addLog('System', 'Cleared uploaded file, loaded sample script.', 'info');
   };
 
+  const handleUpdateRisk = useCallback((riskId: string, status: RiskStatus, note?: string) => {
+    setPipelineState(prev => {
+      if (!prev.riskAnalyst.data) return prev;
+      const updatedRisks = prev.riskAnalyst.data.map(r => 
+        r.id === riskId ? { ...r, status, resolutionNote: note } : r
+      );
+      return {
+        ...prev,
+        riskAnalyst: { ...prev.riskAnalyst, data: updatedRisks }
+      };
+    });
+  }, []);
+
   const runPipeline = useCallback(async () => {
     if (!scriptText.trim() && !uploadedFile) return;
     
@@ -133,24 +169,6 @@ export default function App() {
       const scenes = await runScriptAnalyst(input);
       updateAgentState('scriptAnalyst', { status: 'completed', data: scenes });
       addLog('Script Analyst', `Successfully extracted ${scenes.length} scenes.`, 'success');
-
-      // Fire and forget Location Visualizer (Imagen 3)
-      const uniqueLocations = Array.from(new Set(scenes.flatMap(s => s.locations)));
-      if (uniqueLocations.length > 0) {
-        updateAgentState('locationVisualizer', { status: 'running' });
-        addLog('Location Visualizer', `Generating concept art for ${uniqueLocations.length} locations using Imagen 3...`, 'request');
-        
-        runLocationVisualizer(uniqueLocations).then(images => {
-          updateAgentState('locationVisualizer', { status: 'completed', data: images });
-          addLog('Location Visualizer', `Generated ${Object.keys(images).length} location thumbnails.`, 'success');
-        }).catch(err => {
-          console.error("Location Visualizer Error:", err);
-          updateAgentState('locationVisualizer', { status: 'error', error: String(err) });
-          addLog('Location Visualizer', `Failed to generate images: ${String(err)}`, 'error');
-        });
-      } else {
-        updateAgentState('locationVisualizer', { status: 'completed', data: {} });
-      }
 
       // 2. Research Agent
       updateAgentState('researchAgent', { status: 'running', logs: [] });
@@ -198,7 +216,7 @@ export default function App() {
   const handleRecheck = useCallback(async () => {
     // Use the latest plan and risks from history, or fallback to initial planner/risk analyst
     const latestPlan = pipelineState.changeMonitor.data?.updatedPlan || pipelineState.productionPlanner.data;
-    const latestRisks = pipelineState.changeMonitor.data?.newRisks || pipelineState.riskAnalyst.data;
+    const latestRisks = pipelineState.riskAnalyst.data; // Single source of truth for risks
     const scenes = pipelineState.scriptAnalyst.data;
     
     if (!latestPlan || !latestRisks || !scenes) return;
@@ -219,6 +237,10 @@ export default function App() {
 
       setPipelineState(prev => ({
         ...prev,
+        riskAnalyst: {
+          ...prev.riskAnalyst,
+          data: completeReport.updatedRisks // Update the main risks list
+        },
         changeMonitor: {
           status: 'completed',
           data: completeReport,
@@ -349,7 +371,6 @@ export default function App() {
                         log.agent === 'Production Planner' ? 'text-emerald-400' :
                         log.agent === 'Risk Analyst' ? 'text-rose-400' :
                         log.agent === 'Change Monitor' ? 'text-cyan-400' :
-                        log.agent === 'Location Visualizer' ? 'text-fuchsia-400' :
                         'text-gray-400'
                       }`}>
                         [{log.agent}]
@@ -377,6 +398,7 @@ export default function App() {
             state={pipelineState} 
             error={globalError}
             onRecheck={handleRecheck} 
+            onUpdateRisk={handleUpdateRisk}
           />
         </div>
 
