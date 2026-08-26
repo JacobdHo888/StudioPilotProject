@@ -55,6 +55,8 @@ export interface ChangedFact {
 }
 
 export interface ChangeReport {
+  id?: string;
+  timestamp?: number;
   changeReason: string;
   changedFacts: ChangedFact[];
   updatedPlan: ShootDay[];
@@ -68,7 +70,8 @@ export interface PipelineState {
   researchAgent: { status: AgentStatus; data: ResearchItem[] | null; logs: SearchLog[]; error?: string };
   productionPlanner: { status: AgentStatus; data: ShootDay[] | null; error?: string };
   riskAnalyst: { status: AgentStatus; data: Risk[] | null; error?: string };
-  changeMonitor: { status: AgentStatus; data: ChangeReport | null; error?: string };
+  changeMonitor: { status: AgentStatus; data: ChangeReport | null; history: ChangeReport[]; error?: string };
+  locationVisualizer: { status: AgentStatus; data: Record<string, string> | null; error?: string };
 }
 
 export interface FileData {
