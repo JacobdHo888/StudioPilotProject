@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type, FunctionDeclaration, Modality } from '@google/genai';
+import { GoogleGenAI, Type, FunctionDeclaration } from '@google/genai';
 import { Scene, ResearchItem, ShootDay, Risk, ChangeReport, FileData, SearchLog } from '../types.ts';
 
 // Initialize the SDK. API_KEY must be provided by the environment.
@@ -353,7 +353,7 @@ export const runRiskAnalyst = async (plan: ShootDay[], scenes: Scene[]): Promise
       model: MODEL_NAME,
       contents: `Analyze this production plan and the original scenes for risks (scheduling, location, resources, weather).\n\nPlan:\n${JSON.stringify(plan)}\n\nScenes:\n${JSON.stringify(scenes)}`,
       config: {
-        systemInstruction: "You are a Risk Analyst for film production. Identify potential bottlenecks, safety issues, or scheduling conflicts. Provide actionable mitigations. If no risks are found, return an empty array [].",
+        systemInstruction: "You are a Risk Analyst for film production. Identify potential bottlenecks, safety issues, or scheduling conflicts. Provide actionable mitigations. Assign a unique 'id' to each risk. Set 'status' to 'Open' for all new risks. If no risks are found, return an empty array [].",
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.ARRAY,
@@ -365,8 +365,10 @@ export const runRiskAnalyst = async (plan: ShootDay[], scenes: Scene[]): Promise
               severity: { type: Type.STRING, description: "Must be 'Low', 'Medium', or 'High'" },
               mitigation: { type: Type.STRING },
               affectedScenes: { type: Type.ARRAY, items: { type: Type.STRING } },
+              status: { type: Type.STRING, description: "Must be 'Open'" },
+              resolutionNote: { type: Type.STRING }
             },
-            required: ["id", "description", "severity", "mitigation", "affectedScenes"]
+            required: ["id", "description", "severity", "mitigation", "affectedScenes", "status"]
           }
         }
       }
@@ -430,7 +432,7 @@ export const runChangeMonitor = async (
       model: MODEL_NAME,
       contents: `The following are the previous research findings and the NEW raw search results just retrieved:\n${JSON.stringify(recheckResults, null, 2)}\n\nCurrent Plan:\n${JSON.stringify(plan)}\n\nCurrent Risks:\n${JSON.stringify(risks)}\n\nScenes:\n${JSON.stringify(scenes)}`,
       config: {
-        systemInstruction: "You are a Change Monitor. Compare the 'previousResearch' with the 'newRawSearchResult' for each topic. If the core facts have changed, add it to 'changedFacts' and evaluate the impact on the Current Plan. Generate an updated plan that accommodates these changes (e.g., moving exterior scenes, changing locations). Identify new risks caused by these changes. Extract the sourceUrl, excerpt, and timestamp from the newRawSearchResult JSON. If NO facts changed, return an empty 'changedFacts' array and keep the plan the same.",
+        systemInstruction: "You are a Change Monitor. Compare the 'previousResearch' with the 'newRawSearchResult' for each topic. If the core facts have changed, add it to 'changedFacts' and evaluate the impact on the Current Plan. Generate an updated plan that accommodates these changes (e.g., moving exterior scenes, changing locations).\n\nCRITICAL RISK EVALUATION:\nYou will receive 'Current Risks'. Some may have status 'Resolved'. If the 'changedFacts' directly contradict the resolution of a 'Resolved' risk, change its status back to 'Open' and update its 'resolutionNote' to explain why it was reopened. Do not reopen risks for unrelated reasons. Add any entirely new risks to the list. Return the complete list of all risks as 'updatedRisks'. Also, return a separate list called 'newOrReopenedRisks' containing ONLY the risks that were newly created or had their status changed from 'Resolved' to 'Open'. Extract the sourceUrl, excerpt, and timestamp from the newRawSearchResult JSON. If NO facts changed, return an empty 'changedFacts' array and keep the plan and risks the same.",
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -466,7 +468,7 @@ export const runChangeMonitor = async (
                 required: ["dayNumber", "locations", "scenes", "estimatedHours", "notes"]
               }
             },
-            newRisks: {
+            updatedRisks: {
               type: Type.ARRAY,
               items: {
                 type: Type.OBJECT,
@@ -476,12 +478,30 @@ export const runChangeMonitor = async (
                   severity: { type: Type.STRING },
                   mitigation: { type: Type.STRING },
                   affectedScenes: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  status: { type: Type.STRING, description: "'Open', 'In Progress', or 'Resolved'" },
+                  resolutionNote: { type: Type.STRING }
                 },
-                required: ["id", "description", "severity", "mitigation", "affectedScenes"]
+                required: ["id", "description", "severity", "mitigation", "affectedScenes", "status"]
+              }
+            },
+            newOrReopenedRisks: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                  severity: { type: Type.STRING },
+                  mitigation: { type: Type.STRING },
+                  affectedScenes: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  status: { type: Type.STRING },
+                  resolutionNote: { type: Type.STRING }
+                },
+                required: ["id", "description", "severity", "mitigation", "affectedScenes", "status"]
               }
             }
           },
-          required: ["changeReason", "changedFacts", "updatedPlan", "newRisks"]
+          required: ["changeReason", "changedFacts", "updatedPlan", "updatedRisks", "newOrReopenedRisks"]
         }
       }
     });
@@ -491,46 +511,19 @@ export const runChangeMonitor = async (
     }
     
     try {
-      return JSON.parse(response.text.trim());
+      const parsed = JSON.parse(response.text.trim());
+      if (parsed.changedFacts.length === 0) {
+        return {
+          changeReason: "Re-ran all research queries. No changes detected in real-world constraints.",
+          changedFacts: [],
+          updatedPlan: plan,
+          updatedRisks: risks,
+          newOrReopenedRisks: []
+        };
+      }
+      return parsed;
     } catch (e) {
       throw new Error("Failed to parse JSON response from Change Monitor");
     }
   });
-};
-
-/**
- * Agent 6: Location Visualizer (Imagen 3)
- * Generates concept art for extracted locations.
- * Isolated to prevent blocking the core pipeline.
- */
-export const runLocationVisualizer = async (locations: string[]): Promise<Record<string, string>> => {
-  const results: Record<string, string> = {};
-  
-  // Limit to 4 locations to avoid rate limits during demo
-  const locationsToGenerate = locations.slice(0, 4);
-  
-  await Promise.all(locationsToGenerate.map(async (loc) => {
-    try {
-      const response = await withRetry(async () => {
-        return await ai.models.generateContent({
-          model: 'gemini-3.1-flash-image',
-          contents: `Cinematic concept art for a film location: ${loc}. Highly detailed, moody lighting, 8k resolution, masterpiece, empty set.`,
-          config: {
-            responseModalities: [Modality.IMAGE],
-          },
-        });
-      }, 2, 1000, 30000);
-
-      for (const part of response.candidates?.[0]?.content?.parts || []) {
-        if (part.inlineData) {
-          results[loc] = `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`;
-          break;
-        }
-      }
-    } catch (err) {
-      console.error(`Failed to generate image for ${loc}:`, err);
-    }
-  }));
-
-  return results;
 };
