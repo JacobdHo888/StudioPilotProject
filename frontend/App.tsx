@@ -7,7 +7,8 @@ import {
   runResearchAgent, 
   runProductionPlanner, 
   runRiskAnalyst, 
-  runChangeMonitor 
+  runChangeMonitor,
+  runLocationVisualizer
 } from './services/agentPipeline.ts';
 
 // Entirely original demo screenplay created for this hackathon.
@@ -28,7 +29,8 @@ const INITIAL_STATE: PipelineState = {
   researchAgent: { status: 'idle', data: null, logs: [] },
   productionPlanner: { status: 'idle', data: null },
   riskAnalyst: { status: 'idle', data: null },
-  changeMonitor: { status: 'idle', data: null },
+  changeMonitor: { status: 'idle', data: null, history: [] },
+  locationVisualizer: { status: 'idle', data: null },
 };
 
 export default function App() {
@@ -132,6 +134,24 @@ export default function App() {
       updateAgentState('scriptAnalyst', { status: 'completed', data: scenes });
       addLog('Script Analyst', `Successfully extracted ${scenes.length} scenes.`, 'success');
 
+      // Fire and forget Location Visualizer (Imagen 3)
+      const uniqueLocations = Array.from(new Set(scenes.flatMap(s => s.locations)));
+      if (uniqueLocations.length > 0) {
+        updateAgentState('locationVisualizer', { status: 'running' });
+        addLog('Location Visualizer', `Generating concept art for ${uniqueLocations.length} locations using Imagen 3...`, 'request');
+        
+        runLocationVisualizer(uniqueLocations).then(images => {
+          updateAgentState('locationVisualizer', { status: 'completed', data: images });
+          addLog('Location Visualizer', `Generated ${Object.keys(images).length} location thumbnails.`, 'success');
+        }).catch(err => {
+          console.error("Location Visualizer Error:", err);
+          updateAgentState('locationVisualizer', { status: 'error', error: String(err) });
+          addLog('Location Visualizer', `Failed to generate images: ${String(err)}`, 'error');
+        });
+      } else {
+        updateAgentState('locationVisualizer', { status: 'completed', data: {} });
+      }
+
       // 2. Research Agent
       updateAgentState('researchAgent', { status: 'running', logs: [] });
       addLog('Research Agent', 'Analyzing scenes for real-world constraints...', 'info');
@@ -160,7 +180,7 @@ export default function App() {
       setGlobalError(errorMessage);
       addLog('Orchestrator', `Pipeline failed: ${errorMessage}`, 'error');
       
-      // Mark currently running agent as error
+      // Mark currently running core agent as error
       const agents: (keyof PipelineState)[] = ['scriptAnalyst', 'researchAgent', 'productionPlanner', 'riskAnalyst'];
       for (const agent of agents) {
         setPipelineState(prev => {
@@ -176,20 +196,35 @@ export default function App() {
   }, [scriptText, uploadedFile, handleSearchLog, addLog]);
 
   const handleRecheck = useCallback(async () => {
-    const plan = pipelineState.productionPlanner.data;
-    const risks = pipelineState.riskAnalyst.data;
+    // Use the latest plan and risks from history, or fallback to initial planner/risk analyst
+    const latestPlan = pipelineState.changeMonitor.data?.updatedPlan || pipelineState.productionPlanner.data;
+    const latestRisks = pipelineState.changeMonitor.data?.newRisks || pipelineState.riskAnalyst.data;
     const scenes = pipelineState.scriptAnalyst.data;
     
-    if (!plan || !risks || !scenes) return;
+    if (!latestPlan || !latestRisks || !scenes) return;
 
     setIsRunning(true);
     setGlobalError(null);
-    updateAgentState('changeMonitor', { status: 'running', data: null });
+    updateAgentState('changeMonitor', { status: 'running' });
     addLog('Change Monitor', 'Initiating recheck of previously verified facts...', 'request');
 
     try {
-      const changeReport = await runChangeMonitor(plan, risks, scenes, handleSearchLog);
-      updateAgentState('changeMonitor', { status: 'completed', data: changeReport });
+      const changeReport = await runChangeMonitor(latestPlan, latestRisks, scenes, handleSearchLog);
+      
+      const completeReport = {
+        ...changeReport,
+        id: Math.random().toString(36).substring(7),
+        timestamp: Date.now()
+      };
+
+      setPipelineState(prev => ({
+        ...prev,
+        changeMonitor: {
+          status: 'completed',
+          data: completeReport,
+          history: [completeReport, ...(prev.changeMonitor.history || [])]
+        }
+      }));
       addLog('Change Monitor', 'Plan updated based on new constraints.', 'success');
     } catch (error) {
       console.error("Change Monitor Error:", error);
@@ -314,6 +349,7 @@ export default function App() {
                         log.agent === 'Production Planner' ? 'text-emerald-400' :
                         log.agent === 'Risk Analyst' ? 'text-rose-400' :
                         log.agent === 'Change Monitor' ? 'text-cyan-400' :
+                        log.agent === 'Location Visualizer' ? 'text-fuchsia-400' :
                         'text-gray-400'
                       }`}>
                         [{log.agent}]
