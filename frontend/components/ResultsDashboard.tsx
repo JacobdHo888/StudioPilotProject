@@ -17,8 +17,8 @@ import {
   Activity,
   Clock,
   AlertCircle,
-  ArrowRight,
-  XCircle
+  XCircle,
+  Image as ImageIcon
 } from 'lucide-react';
 
 interface Props {
@@ -31,7 +31,10 @@ export const ResultsDashboard: React.FC<Props> = ({ state, error, onRecheck }) =
   const [activeTab, setActiveTab] = useState<'overview' | 'script' | 'research' | 'plan' | 'risks' | 'changes'>('overview');
 
   const hasData = state.scriptAnalyst.data !== null;
-  const isRunning = Object.values(state).some(agent => agent.status === 'running');
+  
+  // Only block the UI if a CORE agent is running. Location Visualizer runs in the background.
+  const coreAgents = ['scriptAnalyst', 'researchAgent', 'productionPlanner', 'riskAnalyst', 'changeMonitor'] as const;
+  const isCoreRunning = coreAgents.some(key => state[key].status === 'running');
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard, available: hasData },
@@ -39,7 +42,7 @@ export const ResultsDashboard: React.FC<Props> = ({ state, error, onRecheck }) =
     { id: 'research', label: 'Research', icon: Search, available: state.researchAgent.data !== null || state.researchAgent.logs.length > 0 },
     { id: 'plan', label: 'Schedule', icon: Calendar, available: state.productionPlanner.data !== null },
     { id: 'risks', label: 'Risks', icon: ShieldAlert, available: state.riskAnalyst.data !== null },
-    { id: 'changes', label: 'Monitor', icon: RefreshCw, available: state.changeMonitor.data !== null },
+    { id: 'changes', label: 'Plan History', icon: RefreshCw, available: state.productionPlanner.data !== null },
   ] as const;
 
   // Calculate summary metrics
@@ -49,7 +52,7 @@ export const ResultsDashboard: React.FC<Props> = ({ state, error, onRecheck }) =
   const totalLocations = new Set(state.scriptAnalyst.data?.flatMap(s => s.locations) || []).size;
 
   // Determine active agent for loading state
-  const activeAgentEntry = Object.entries(state).find(([_, agent]) => agent.status === 'running');
+  const activeAgentEntry = Object.entries(state).find(([key, agent]) => coreAgents.includes(key as any) && agent.status === 'running');
   const activeAgentKey = activeAgentEntry ? activeAgentEntry[0] : null;
   
   const agentDisplayNames: Record<string, string> = {
@@ -88,7 +91,7 @@ export const ResultsDashboard: React.FC<Props> = ({ state, error, onRecheck }) =
     );
   }
 
-  if (!hasData && !isRunning) {
+  if (!hasData && !isCoreRunning) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-gray-500 bg-cinema-900/30 rounded-2xl border border-cinema-800 border-dashed">
         <div className="bg-cinema-800 p-4 rounded-full mb-4 shadow-lg">
@@ -163,8 +166,8 @@ export const ResultsDashboard: React.FC<Props> = ({ state, error, onRecheck }) =
       {/* Content Area */}
       <div className="flex-1 overflow-y-auto p-6 bg-[#0a0a0a] custom-scrollbar relative">
         
-        {/* Detailed Loading Overlay */}
-        {isRunning && activeAgentKey && (
+        {/* Detailed Loading Overlay (Only for Core Agents) */}
+        {isCoreRunning && activeAgentKey && (
           <div className="absolute inset-0 bg-[#0a0a0a]/90 backdrop-blur-sm z-20 flex flex-col items-center justify-center p-8">
             <div className="bg-cinema-900 p-8 rounded-2xl border border-cinema-700 shadow-2xl w-full max-w-lg">
               <div className="flex items-center justify-center mb-6">
@@ -256,6 +259,39 @@ export const ResultsDashboard: React.FC<Props> = ({ state, error, onRecheck }) =
                   </div>
                 ) : (
                   <div className="text-sm text-gray-500 italic">Risk analysis pending...</div>
+                )}
+              </div>
+              
+              {/* Location Concept Art */}
+              <div className="col-span-2 bg-cinema-900 border border-cinema-800 rounded-xl p-5 shadow-lg">
+                <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-4 flex items-center">
+                  <ImageIcon className="w-4 h-4 mr-2 text-fuchsia-400"/> Location Concept Art
+                </h3>
+                {state.locationVisualizer.status === 'running' && (!state.locationVisualizer.data || Object.keys(state.locationVisualizer.data).length === 0) ? (
+                   <div className="flex flex-col items-center justify-center p-8 border border-cinema-800 border-dashed rounded-xl bg-cinema-900/50">
+                     <Loader2 className="w-8 h-8 text-fuchsia-500 animate-spin mb-3" />
+                     <span className="text-gray-400 text-sm">Generating concept art with Imagen 3...</span>
+                   </div>
+                ) : state.locationVisualizer.data && Object.keys(state.locationVisualizer.data).length > 0 ? (
+                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                     {Object.entries(state.locationVisualizer.data).map(([loc, imgData]) => (
+                       <div key={loc} className="relative group rounded-lg overflow-hidden border border-cinema-700 bg-cinema-800 aspect-video">
+                         <img src={imgData} alt={loc} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent flex items-end p-3 opacity-90 group-hover:opacity-100 transition-opacity">
+                           <span className="text-xs font-bold text-white truncate drop-shadow-md">{loc}</span>
+                         </div>
+                       </div>
+                     ))}
+                     {state.locationVisualizer.status === 'running' && (
+                       <div className="flex items-center justify-center border border-cinema-800 border-dashed rounded-lg bg-cinema-900/50 aspect-video">
+                         <Loader2 className="w-6 h-6 text-fuchsia-500 animate-spin" />
+                       </div>
+                     )}
+                   </div>
+                ) : state.locationVisualizer.status === 'error' ? (
+                   <div className="text-sm text-rose-400 italic p-4 bg-rose-500/10 rounded-lg border border-rose-500/20">Failed to generate concept art.</div>
+                ) : (
+                   <div className="text-sm text-gray-500 italic p-4">No locations extracted or generation pending...</div>
                 )}
               </div>
             </div>
@@ -427,128 +463,167 @@ export const ResultsDashboard: React.FC<Props> = ({ state, error, onRecheck }) =
                 <p className="text-sm text-gray-500 text-center max-w-md">The Risk Analyst reviewed the schedule and found no major logistical or safety concerns.</p>
               </div>
             )}
-            
-            {state.changeMonitor.status === 'idle' && (
-              <div className="mt-8 pt-8 border-t border-cinema-800 text-center">
-                <div className="inline-block bg-cinema-900 p-6 rounded-2xl border border-cinema-700 shadow-xl">
-                  <RefreshCw className="w-8 h-8 text-blue-500 mx-auto mb-3" />
-                  <h4 className="text-lg font-bold text-white mb-2">Simulate Disruption</h4>
-                  <p className="text-sm text-gray-400 mb-5 max-w-md mx-auto">Trigger the Change Monitor agent to simulate an unexpected event (e.g., weather, location loss) and dynamically re-evaluate the production plan.</p>
-                  <button 
-                    onClick={onRecheck}
-                    className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded-xl font-semibold transition-all shadow-lg shadow-blue-900/20 border border-blue-500"
-                  >
-                    Run Change Monitor
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
-        {/* CHANGES TAB */}
-        {activeTab === 'changes' && state.changeMonitor.data && (
-          <div className="space-y-8 animate-in fade-in duration-500">
-            <div className="bg-rose-500/10 border border-rose-500/30 p-6 rounded-2xl shadow-lg">
-              <h3 className="text-rose-400 font-black text-xl flex items-center mb-3 uppercase tracking-wider">
-                <AlertTriangle className="w-6 h-6 mr-2" />
-                Disruption Detected
-              </h3>
-              <p className="text-gray-200 text-lg leading-relaxed">{state.changeMonitor.data.changeReason}</p>
+        {/* CHANGES TAB (PLAN HISTORY) */}
+        {activeTab === 'changes' && (
+          <div className="space-y-6 animate-in fade-in duration-500">
+            {/* Header with button */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-cinema-900 p-6 rounded-2xl border border-cinema-800 shadow-lg gap-4">
+              <div>
+                <h3 className="text-xl font-bold text-white mb-1">Plan History & Monitor</h3>
+                <p className="text-sm text-gray-400">Track disruptions and schedule adaptations over time.</p>
+              </div>
+              <button 
+                onClick={onRecheck}
+                disabled={isRunning}
+                className="bg-blue-600 hover:bg-blue-500 disabled:bg-cinema-800 disabled:text-gray-500 text-white px-6 py-2.5 rounded-xl font-semibold transition-all shadow-lg shadow-blue-900/20 border border-blue-500 disabled:border-cinema-700 flex items-center shrink-0"
+              >
+                {isRunning && activeAgentKey === 'changeMonitor' ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Checking...</>
+                ) : (
+                  <><RefreshCw className="w-4 h-4 mr-2" /> Simulate Disruption</>
+                )}
+              </button>
             </div>
 
-            {/* NEW: What Changed Section */}
-            {state.changeMonitor.data.changedFacts && state.changeMonitor.data.changedFacts.length > 0 && (
-              <div>
-                <h4 className="font-bold text-gray-300 uppercase tracking-wider mb-4 flex items-center text-sm">
-                  <Activity className="w-4 h-4 mr-2 text-amber-400"/> What Changed
-                </h4>
-                <div className="space-y-4">
-                  {state.changeMonitor.data.changedFacts.map((fact, idx) => (
-                    <div key={idx} className="bg-cinema-900 rounded-xl border border-cinema-700 shadow-md overflow-hidden">
-                      <div className="bg-cinema-800/80 p-3 border-b border-cinema-700 flex justify-between items-center">
-                        <span className="font-bold text-gray-200">{fact.topic}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Affected Scenes:</span>
-                          <div className="flex gap-1">
-                            {fact.affectedScenes.map(s => <span key={s} className="bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2 py-0.5 rounded text-xs font-bold">{s}</span>)}
-                          </div>
-                        </div>
+            {/* History List */}
+            {state.changeMonitor.history && state.changeMonitor.history.length > 0 ? (
+              <div className="space-y-8 relative pl-8 before:absolute before:inset-y-0 before:left-3 before:w-0.5 before:bg-cinema-800">
+                {state.changeMonitor.history.map((report, index) => (
+                  <div key={report.id} className="relative">
+                    {/* Dot */}
+                    <div className="absolute -left-[29px] top-6 w-6 h-6 bg-cinema-900 border-2 border-blue-500 rounded-full flex items-center justify-center z-10">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    </div>
+                    
+                    {/* Content Card */}
+                    <div className="bg-cinema-900/80 rounded-2xl border border-cinema-700 shadow-xl overflow-hidden">
+                      <div className="bg-cinema-800/50 p-4 border-b border-cinema-700 flex justify-between items-center">
+                        <h3 className="text-lg font-bold text-white flex items-center">
+                          <RefreshCw className="w-5 h-5 mr-2 text-blue-400" />
+                          Plan Revision {state.changeMonitor.history.length - index}
+                        </h3>
+                        <span className="text-xs text-gray-400 font-mono bg-cinema-900 px-3 py-1 rounded-full border border-cinema-700">
+                          {new Date(report.timestamp!).toLocaleString()}
+                        </span>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-cinema-700">
-                        <div className="p-4 bg-cinema-900/50">
-                          <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold flex items-center mb-2">
-                            <Clock className="w-3 h-3 mr-1"/> Previous Finding
-                          </span>
-                          <p className="text-sm text-gray-400 line-through decoration-rose-500/50">{fact.previousFinding}</p>
+                      
+                      <div className="p-6 space-y-8">
+                        {/* Disruption Reason */}
+                        <div className="bg-rose-500/10 border border-rose-500/30 p-5 rounded-xl">
+                          <h4 className="text-rose-400 font-bold flex items-center mb-2 text-sm uppercase tracking-wider">
+                            <AlertTriangle className="w-4 h-4 mr-2" /> Disruption Detected
+                          </h4>
+                          <p className="text-gray-200 text-sm leading-relaxed">{report.changeReason}</p>
                         </div>
-                        <div className="p-4 bg-rose-900/10">
-                          <span className="text-[10px] text-rose-400 uppercase tracking-wider font-bold flex items-center mb-2">
-                            <AlertCircle className="w-3 h-3 mr-1"/> New Reality
-                          </span>
-                          <p className="text-sm text-gray-200 font-medium mb-3">{fact.newFinding}</p>
-                          
-                          {fact.sourceUrl && (
-                            <div className="bg-cinema-900/50 p-2.5 rounded border border-rose-500/20">
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold flex items-center">
-                                  <LinkIcon className="w-3 h-3 mr-1" /> Source
-                                </span>
-                                <span className="text-[10px] text-gray-500 font-mono">
-                                  {fact.timestamp ? new Date(fact.timestamp).toLocaleTimeString() : 'N/A'}
-                                </span>
+
+                        {/* What Changed */}
+                        {report.changedFacts && report.changedFacts.length > 0 && (
+                          <div>
+                            <h4 className="font-bold text-gray-300 uppercase tracking-wider mb-4 flex items-center text-sm">
+                              <Activity className="w-4 h-4 mr-2 text-amber-400"/> What Changed
+                            </h4>
+                            <div className="space-y-4">
+                              {report.changedFacts.map((fact, idx) => (
+                                <div key={idx} className="bg-cinema-900 rounded-xl border border-cinema-700 shadow-md overflow-hidden">
+                                  <div className="bg-cinema-800/80 p-3 border-b border-cinema-700 flex justify-between items-center">
+                                    <span className="font-bold text-gray-200">{fact.topic}</span>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Affected Scenes:</span>
+                                      <div className="flex gap-1">
+                                        {fact.affectedScenes.map(s => <span key={s} className="bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2 py-0.5 rounded text-xs font-bold">{s}</span>)}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-cinema-700">
+                                    <div className="p-4 bg-cinema-900/50">
+                                      <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold flex items-center mb-2">
+                                        <Clock className="w-3 h-3 mr-1"/> Previous Finding
+                                      </span>
+                                      <p className="text-sm text-gray-400 line-through decoration-rose-500/50">{fact.previousFinding}</p>
+                                    </div>
+                                    <div className="p-4 bg-rose-900/10">
+                                      <span className="text-[10px] text-rose-400 uppercase tracking-wider font-bold flex items-center mb-2">
+                                        <AlertCircle className="w-3 h-3 mr-1"/> New Reality
+                                      </span>
+                                      <p className="text-sm text-gray-200 font-medium mb-3">{fact.newFinding}</p>
+                                      
+                                      {fact.sourceUrl && (
+                                        <div className="bg-cinema-900/50 p-2.5 rounded border border-rose-500/20">
+                                          <div className="flex items-center justify-between mb-1">
+                                            <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold flex items-center">
+                                              <LinkIcon className="w-3 h-3 mr-1" /> Source
+                                            </span>
+                                            <span className="text-[10px] text-gray-500 font-mono">
+                                              {fact.timestamp ? new Date(fact.timestamp).toLocaleTimeString() : 'N/A'}
+                                            </span>
+                                          </div>
+                                          <a href={fact.sourceUrl} target="_blank" rel="noreferrer" className="text-[10px] text-blue-400 hover:underline truncate block mb-1.5">
+                                            {fact.sourceUrl}
+                                          </a>
+                                          {fact.excerpt && (
+                                            <p className="text-[10px] text-gray-400 italic border-l-2 border-rose-500/30 pl-2">"{fact.excerpt}"</p>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Adjusted Schedule & Risks */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                          <div>
+                            <h4 className="font-bold text-gray-300 uppercase tracking-wider mb-4 flex items-center text-sm"><Calendar className="w-4 h-4 mr-2 text-blue-400"/> Adjusted Schedule</h4>
+                            <div className="space-y-3">
+                              {report.updatedPlan.map((day, idx) => (
+                                <div key={idx} className="bg-cinema-900 p-4 rounded-xl border border-cinema-700 shadow-md flex justify-between items-center">
+                                  <div>
+                                    <span className="font-black text-blue-400 text-lg mr-3">D{day.dayNumber}</span>
+                                    <span className="text-sm text-gray-300 font-medium">{day.locations.join(', ')}</span>
+                                  </div>
+                                  <div className="flex gap-1.5">
+                                    {day.scenes.map(s => <span key={s} className="bg-cinema-800 border border-cinema-600 text-gray-300 px-2 py-0.5 rounded text-xs font-bold">{s}</span>)}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {report.newRisks.length > 0 && (
+                            <div>
+                              <h4 className="font-bold text-gray-300 uppercase tracking-wider mb-4 flex items-center text-sm"><ShieldAlert className="w-4 h-4 mr-2 text-amber-400"/> New Risks Introduced</h4>
+                              <div className="space-y-3">
+                                {report.newRisks.map((risk, idx) => (
+                                  <div key={idx} className="bg-cinema-900 p-4 rounded-xl border-l-4 border-amber-500 border-y border-r border-cinema-700 shadow-md">
+                                    <p className="text-sm text-gray-100 font-bold mb-2">{risk.description}</p>
+                                    <div className="bg-cinema-800/50 p-2.5 rounded border border-cinema-700/50">
+                                      <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold block mb-1">Mitigation</span>
+                                      <p className="text-xs text-gray-300">{risk.mitigation}</p>
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
-                              <a href={fact.sourceUrl} target="_blank" rel="noreferrer" className="text-[10px] text-blue-400 hover:underline truncate block mb-1.5">
-                                {fact.sourceUrl}
-                              </a>
-                              {fact.excerpt && (
-                                <p className="text-[10px] text-gray-400 italic border-l-2 border-rose-500/30 pl-2">"{fact.excerpt}"</p>
-                              )}
                             </div>
                           )}
                         </div>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center p-12 bg-cinema-900/50 rounded-xl border border-cinema-800 border-dashed">
+                <Activity className="w-12 h-12 text-blue-500 mb-4 opacity-50" />
+                <h3 className="text-lg font-medium text-gray-300 mb-2">No Disruptions Yet</h3>
+                <p className="text-sm text-gray-500 text-center max-w-md">Click "Simulate Disruption" to see how the Change Monitor adapts the production plan to real-world changes.</p>
               </div>
             )}
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div>
-                <h4 className="font-bold text-gray-300 uppercase tracking-wider mb-4 flex items-center text-sm"><Calendar className="w-4 h-4 mr-2 text-blue-400"/> Adjusted Schedule</h4>
-                <div className="space-y-3">
-                  {state.changeMonitor.data.updatedPlan.map((day, idx) => (
-                    <div key={idx} className="bg-cinema-900 p-4 rounded-xl border border-cinema-700 shadow-md flex justify-between items-center">
-                      <div>
-                        <span className="font-black text-blue-400 text-lg mr-3">D{day.dayNumber}</span>
-                        <span className="text-sm text-gray-300 font-medium">{day.locations.join(', ')}</span>
-                      </div>
-                      <div className="flex gap-1.5">
-                        {day.scenes.map(s => <span key={s} className="bg-cinema-800 border border-cinema-600 text-gray-300 px-2 py-0.5 rounded text-xs font-bold">{s}</span>)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {state.changeMonitor.data.newRisks.length > 0 && (
-                <div>
-                  <h4 className="font-bold text-gray-300 uppercase tracking-wider mb-4 flex items-center text-sm"><ShieldAlert className="w-4 h-4 mr-2 text-amber-400"/> New Risks Introduced</h4>
-                  <div className="space-y-3">
-                    {state.changeMonitor.data.newRisks.map((risk, idx) => (
-                      <div key={idx} className="bg-cinema-900 p-4 rounded-xl border-l-4 border-amber-500 border-y border-r border-cinema-700 shadow-md">
-                        <p className="text-sm text-gray-100 font-bold mb-2">{risk.description}</p>
-                        <div className="bg-cinema-800/50 p-2.5 rounded border border-cinema-700/50">
-                          <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold block mb-1">Mitigation</span>
-                          <p className="text-xs text-gray-300">{risk.mitigation}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
         )}
       </div>
