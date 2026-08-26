@@ -5,6 +5,10 @@ import { Scene, ResearchItem, ShootDay, Risk, ChangeReport, FileData, SearchLog 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY, vertexai: true });
 const MODEL_NAME = 'gemini-2.5-flash';
 
+// Configuration for Parallel Search limits
+const MAX_SEARCHES_PER_RUN = 3;
+const SEARCH_TIMEOUT_MS = 8000; // 8 seconds max per search call
+
 /**
  * Helper function to execute API calls with exponential backoff retry logic and timeout.
  */
@@ -112,9 +116,12 @@ export const runScriptAnalyst = async (scriptInput: string | FileData): Promise<
  * Simulates the Parallel Search API response based on the query.
  * Returns a JSON string containing the result, source URL, excerpt, and timestamp.
  */
-function simulateParallelSearch(query: string, category: string, isRecheck: boolean = false): string {
+async function simulateParallelSearch(query: string, category: string, isRecheck: boolean = false): Promise<string> {
   if (!query) throw new Error("Empty search query provided.");
   
+  // Simulate network delay
+  await new Promise(resolve => setTimeout(resolve, 600));
+
   const q = query.toLowerCase();
   const timestamp = new Date().toISOString();
   
@@ -193,8 +200,9 @@ EXPLICIT RULES FOR RESEARCH:
 2. ALWAYS search for historical weather data if the scene is EXT (exterior).
 3. ALWAYS search for specialty equipment (e.g., cranes, prop weapons, specialized vehicles, drones).
 4. DO NOT search for generic indoor sets (e.g., 'INT. BEDROOM') or common everyday props.
+5. CRITICAL: You have a strict limit of ${MAX_SEARCHES_PER_RUN} search queries. Prioritize the most critical logistical risks (locations, dangerous stunts, weather).
 
-You must use the parallelSearch tool to gather this information. The tool returns a JSON string containing the result, sourceUrl, excerpt, and timestamp.`;
+You must use the parallelSearch tool to gather this information. The tool returns a JSON string containing the result, sourceUrl, excerpt, and timestamp. If a search times out or fails, note it and set the status accordingly.`;
 
     let contents: any[] = [
       {
@@ -223,8 +231,14 @@ You must use the parallelSearch tool to gather this information. The tool return
     if (toolResponse.functionCalls && toolResponse.functionCalls.length > 0) {
       finalContents.push(toolResponse.candidates[0].content);
 
+      // Enforce the cap on Parallel Search calls
+      const callsToExecute = toolResponse.functionCalls.slice(0, MAX_SEARCHES_PER_RUN);
+      if (toolResponse.functionCalls.length > MAX_SEARCHES_PER_RUN) {
+        console.warn(`Capped searches at ${MAX_SEARCHES_PER_RUN}. Ignored ${toolResponse.functionCalls.length - MAX_SEARCHES_PER_RUN} queries.`);
+      }
+
       const functionResponsesParts = [];
-      for (const call of toolResponse.functionCalls) {
+      for (const call of callsToExecute) {
         if (call.name === 'parallelSearch') {
           const args = call.args as any;
           const query = args.query || 'General search';
@@ -232,9 +246,15 @@ You must use the parallelSearch tool to gather this information. The tool return
           
           let result = "";
           try {
-            result = simulateParallelSearch(query, category, false);
+            const searchPromise = simulateParallelSearch(query, category, false);
+            const timeoutPromise = new Promise<string>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), SEARCH_TIMEOUT_MS));
+            result = await Promise.race([searchPromise, timeoutPromise]);
           } catch (err) {
-            result = JSON.stringify({ error: err instanceof Error ? err.message : 'Unknown error' });
+            if (err instanceof Error && err.message === 'TIMEOUT') {
+              result = JSON.stringify({ error: "Search timed out. Research incomplete for this item.", status: "timeout" });
+            } else {
+              result = JSON.stringify({ error: err instanceof Error ? err.message : 'Unknown error', status: "error" });
+            }
           }
 
           onSearchLog({
@@ -263,7 +283,7 @@ You must use the parallelSearch tool to gather this information. The tool return
       model: MODEL_NAME,
       contents: finalContents,
       config: {
-        systemInstruction: systemInstruction + "\n\nNow, summarize your findings into the final JSON array format. Extract the sourceUrl, excerpt, and timestamp from the tool's JSON response. If no research was needed or found, return an empty array [].",
+        systemInstruction: systemInstruction + "\n\nNow, summarize your findings into the final JSON array format. Extract the sourceUrl, excerpt, and timestamp from the tool's JSON response. If a tool response contains an error or timeout, set the 'status' field to 'timeout' or 'error' accordingly, otherwise 'success'. If no research was needed or found, return an empty array [].",
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.ARRAY,
@@ -272,13 +292,14 @@ You must use the parallelSearch tool to gather this information. The tool return
             properties: {
               topic: { type: Type.STRING, description: "What is being researched (e.g., 'Bank Location Permits')" },
               query: { type: Type.STRING, description: "The search query used" },
-              simulatedFindings: { type: Type.STRING, description: "The result of the search" },
+              simulatedFindings: { type: Type.STRING, description: "The result of the search or the error message" },
               relevance: { type: Type.STRING, description: "Why this matters to the production" },
-              sourceUrl: { type: Type.STRING, description: "The URL of the source" },
-              excerpt: { type: Type.STRING, description: "A short excerpt from the source" },
-              timestamp: { type: Type.STRING, description: "The timestamp of the retrieval" }
+              sourceUrl: { type: Type.STRING, description: "The URL of the source (empty if error)" },
+              excerpt: { type: Type.STRING, description: "A short excerpt from the source (empty if error)" },
+              timestamp: { type: Type.STRING, description: "The timestamp of the retrieval" },
+              status: { type: Type.STRING, description: "'success', 'timeout', or 'error'" }
             },
-            required: ["topic", "query", "simulatedFindings", "relevance", "sourceUrl", "excerpt", "timestamp"]
+            required: ["topic", "query", "simulatedFindings", "relevance", "sourceUrl", "excerpt", "timestamp", "status"]
           }
         }
       }
@@ -404,35 +425,62 @@ export const runChangeMonitor = async (
     const previousResearch: ResearchItem[] = JSON.parse(storedResearch);
     const recheckResults: any[] = [];
 
-    // 2. Re-run searches
-    for (const item of previousResearch) {
-      let newResult = "";
+    // 2. Re-run searches with cap and timeout
+    const itemsToRecheck = previousResearch.slice(0, MAX_SEARCHES_PER_RUN);
+    
+    for (const item of itemsToRecheck) {
+      let newRawResult = "";
+      let parsedNewResult: any = null;
       try {
-        newResult = simulateParallelSearch(item.query, 'RECHECK', true);
+        const searchPromise = simulateParallelSearch(item.query, 'RECHECK', true);
+        const timeoutPromise = new Promise<string>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), SEARCH_TIMEOUT_MS));
+        newRawResult = await Promise.race([searchPromise, timeoutPromise]);
+        parsedNewResult = JSON.parse(newRawResult);
       } catch (err) {
-        newResult = JSON.stringify({ error: err instanceof Error ? err.message : 'Unknown error' });
+        if (err instanceof Error && err.message === 'TIMEOUT') {
+           newRawResult = JSON.stringify({ error: "Search timed out. Research incomplete.", status: "timeout" });
+        } else {
+           newRawResult = JSON.stringify({ error: err instanceof Error ? err.message : 'Unknown error', status: "error" });
+        }
+        parsedNewResult = JSON.parse(newRawResult);
       }
       
+      const newFindingText = parsedNewResult?.result || parsedNewResult?.error || newRawResult;
+
       onSearchLog({
         query: item.query,
         category: 'RECHECK',
-        result: newResult,
+        result: newFindingText,
         timestamp: Date.now()
       });
 
-      recheckResults.push({
-        topic: item.topic,
-        previousResearch: item,
-        newRawSearchResult: newResult
-      });
+      // Compare the core finding text against the previously extracted simulatedFindings
+      if (newFindingText !== item.simulatedFindings && !newFindingText.includes('Unknown error')) {
+        recheckResults.push({
+          topic: item.topic,
+          previousResearch: item,
+          newRawSearchResult: newRawResult
+        });
+      }
     }
 
-    // 3. Ask Gemini to evaluate impact and update plan
+    // 3. If no changes, return early
+    if (recheckResults.length === 0) {
+      return {
+        changeReason: "Re-ran all research queries. No changes detected in real-world constraints.",
+        changedFacts: [],
+        updatedPlan: plan,
+        updatedRisks: risks,
+        newOrReopenedRisks: []
+      };
+    }
+
+    // 4. If changes exist, ask Gemini to evaluate impact and update plan
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
       contents: `The following are the previous research findings and the NEW raw search results just retrieved:\n${JSON.stringify(recheckResults, null, 2)}\n\nCurrent Plan:\n${JSON.stringify(plan)}\n\nCurrent Risks:\n${JSON.stringify(risks)}\n\nScenes:\n${JSON.stringify(scenes)}`,
       config: {
-        systemInstruction: "You are a Change Monitor. Compare the 'previousResearch' with the 'newRawSearchResult' for each topic. If the core facts have changed, add it to 'changedFacts' and evaluate the impact on the Current Plan. Generate an updated plan that accommodates these changes (e.g., moving exterior scenes, changing locations).\n\nCRITICAL RISK EVALUATION:\nYou will receive 'Current Risks'. Some may have status 'Resolved'. If the 'changedFacts' directly contradict the resolution of a 'Resolved' risk, change its status back to 'Open' and update its 'resolutionNote' to explain why it was reopened. Do not reopen risks for unrelated reasons. Add any entirely new risks to the list. Return the complete list of all risks as 'updatedRisks'. Also, return a separate list called 'newOrReopenedRisks' containing ONLY the risks that were newly created or had their status changed from 'Resolved' to 'Open'. Extract the sourceUrl, excerpt, and timestamp from the newRawSearchResult JSON. If NO facts changed, return an empty 'changedFacts' array and keep the plan and risks the same.",
+        systemInstruction: "You are a Change Monitor. Compare the 'previousResearch' with the 'newRawSearchResult' for each topic. If the core facts have changed, add it to 'changedFacts' and evaluate the impact on the Current Plan. Generate an updated plan that accommodates these changes (e.g., moving exterior scenes, changing locations).\n\nCRITICAL RISK EVALUATION:\nYou will receive 'Current Risks'. Some may have status 'Resolved'. If the 'changedFacts' directly contradict the resolution of a 'Resolved' risk, change its status back to 'Open' and update its 'resolutionNote' to explain why it was reopened. Do not reopen risks for unrelated reasons. Add any entirely new risks to the list. Return the complete list of all risks as 'updatedRisks'. Also, return a separate list called 'newOrReopenedRisks' containing ONLY the risks that were newly created or had their status changed from 'Resolved' to 'Open'. For 'changedFacts', pass through the provided sourceUrl, excerpt, and timestamp, and determine the 'affectedScenes'.",
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -512,15 +560,6 @@ export const runChangeMonitor = async (
     
     try {
       const parsed = JSON.parse(response.text.trim());
-      if (parsed.changedFacts.length === 0) {
-        return {
-          changeReason: "Re-ran all research queries. No changes detected in real-world constraints.",
-          changedFacts: [],
-          updatedPlan: plan,
-          updatedRisks: risks,
-          newOrReopenedRisks: []
-        };
-      }
       return parsed;
     } catch (e) {
       throw new Error("Failed to parse JSON response from Change Monitor");
