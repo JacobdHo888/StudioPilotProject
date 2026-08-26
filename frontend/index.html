@@ -4,28 +4,79 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>StudioPilot - AI Production Coordinator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         theme: {
           extend: {
             colors: {
-              cinema: {
-                900: '#0a0a0a',
-                800: '#171717',
-                700: '#262626',
-                accent: '#3b82f6', // Blue accent
-                warning: '#f59e0b',
-                danger: '#ef4444',
-                success: '#10b981'
+              studio: {
+                950: '#050507', // Deepest slate/black
+                900: '#0B0C10', // Panel background
+                800: '#15171E', // Card background
+                700: '#22252E', // Borders
+                600: '#333845', // Lighter borders/text
+                accent: '#00E5FF', // Cinematic Cyan
+                gold: '#FFB300', // Cinematic Amber
+                danger: '#FF3366', // Neon Red
+                success: '#00E676' // Neon Green
               }
+            },
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              mono: ['"JetBrains Mono"', 'monospace'],
+              script: ['"Courier Prime"', 'monospace']
+            },
+            backgroundImage: {
+              'warning-stripes': 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255, 51, 102, 0.1) 10px, rgba(255, 51, 102, 0.1) 20px)',
+              'warning-stripes-amber': 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255, 179, 0, 0.1) 10px, rgba(255, 179, 0, 0.1) 20px)',
             }
           }
         }
       }
     </script>
-      </head>
-  <body class="bg-cinema-900 text-gray-100 min-h-screen font-sans selection:bg-cinema-accent selection:text-white">
+        <style>
+      /* Custom Scrollbar for a sleeker look */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #050507; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #22252E; 
+        border-radius: 3px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #333845; 
+      }
+      .hud-corners {
+        position: relative;
+      }
+      .hud-corners::before, .hud-corners::after {
+        content: '';
+        position: absolute;
+        width: 8px;
+        height: 8px;
+        border-color: #00E5FF;
+        border-style: solid;
+        opacity: 0.5;
+      }
+      .hud-corners::before {
+        top: 0; left: 0;
+        border-width: 2px 0 0 2px;
+      }
+      .hud-corners::after {
+        bottom: 0; right: 0;
+        border-width: 0 2px 2px 0;
+      }
+    </style>
+  </head>
+  <body class="bg-studio-950 text-gray-200 min-h-screen font-sans selection:bg-studio-accent selection:text-studio-950">
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>
   <script type="module" src="/index.js"></script></body>
