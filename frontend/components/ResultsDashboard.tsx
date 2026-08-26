@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PipelineState } from '../types.ts';
+import { PipelineState, RiskStatus } from '../types.ts';
 import { 
   FileText, 
   Search, 
@@ -17,22 +17,23 @@ import {
   Activity,
   Clock,
   AlertCircle,
-  XCircle,
-  Image as ImageIcon
+  XCircle
 } from 'lucide-react';
 
 interface Props {
   state: PipelineState;
   error: string | null;
   onRecheck: () => void;
+  onUpdateRisk: (id: string, status: RiskStatus, note?: string) => void;
 }
 
-export const ResultsDashboard: React.FC<Props> = ({ state, error, onRecheck }) => {
+export const ResultsDashboard: React.FC<Props> = ({ state, error, onRecheck, onUpdateRisk }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'script' | 'research' | 'plan' | 'risks' | 'changes'>('overview');
 
   const hasData = state.scriptAnalyst.data !== null;
+  const isRunning = Object.values(state).some(agent => agent.status === 'running');
   
-  // Only block the UI if a CORE agent is running. Location Visualizer runs in the background.
+  // Only block the UI if a CORE agent is running.
   const coreAgents = ['scriptAnalyst', 'researchAgent', 'productionPlanner', 'riskAnalyst', 'changeMonitor'] as const;
   const isCoreRunning = coreAgents.some(key => state[key].status === 'running');
 
@@ -48,7 +49,7 @@ export const ResultsDashboard: React.FC<Props> = ({ state, error, onRecheck }) =
   // Calculate summary metrics
   const totalScenes = state.scriptAnalyst.data?.length || 0;
   const totalDays = state.productionPlanner.data?.length || 0;
-  const highRisks = state.riskAnalyst.data?.filter(r => r.severity === 'High').length || 0;
+  const highRisks = state.riskAnalyst.data?.filter(r => r.severity === 'High' && r.status !== 'Resolved').length || 0;
   const totalLocations = new Set(state.scriptAnalyst.data?.flatMap(s => s.locations) || []).size;
 
   // Determine active agent for loading state
@@ -133,7 +134,7 @@ export const ResultsDashboard: React.FC<Props> = ({ state, error, onRecheck }) =
           <div className="p-4 flex items-center gap-4">
             <div className="bg-rose-500/10 p-2 rounded-lg"><AlertTriangle className="w-5 h-5 text-rose-400" /></div>
             <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">High Risks</p>
+              <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Open High Risks</p>
               <p className="text-2xl font-bold text-gray-100">{state.riskAnalyst.data ? highRisks : '-'}</p>
             </div>
           </div>
@@ -244,7 +245,7 @@ export const ResultsDashboard: React.FC<Props> = ({ state, error, onRecheck }) =
                 <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-4 flex items-center"><ShieldAlert className="w-4 h-4 mr-2 text-rose-400"/> Critical Risks</h3>
                 {state.riskAnalyst.data ? (
                   <div className="space-y-3">
-                    {state.riskAnalyst.data.filter(r => r.severity === 'High' || r.severity === 'Medium').slice(0, 3).map((risk, i) => (
+                    {state.riskAnalyst.data.filter(r => r.severity === 'High' && r.status !== 'Resolved').slice(0, 3).map((risk, i) => (
                       <div key={i} className="flex items-start gap-3 p-3 bg-cinema-800/50 rounded-lg border border-cinema-700/50">
                         <AlertTriangle className={`w-4 h-4 mt-0.5 shrink-0 ${risk.severity === 'High' ? 'text-rose-400' : 'text-amber-400'}`} />
                         <div>
@@ -259,39 +260,6 @@ export const ResultsDashboard: React.FC<Props> = ({ state, error, onRecheck }) =
                   </div>
                 ) : (
                   <div className="text-sm text-gray-500 italic">Risk analysis pending...</div>
-                )}
-              </div>
-              
-              {/* Location Concept Art */}
-              <div className="col-span-2 bg-cinema-900 border border-cinema-800 rounded-xl p-5 shadow-lg">
-                <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-4 flex items-center">
-                  <ImageIcon className="w-4 h-4 mr-2 text-fuchsia-400"/> Location Concept Art
-                </h3>
-                {state.locationVisualizer.status === 'running' && (!state.locationVisualizer.data || Object.keys(state.locationVisualizer.data).length === 0) ? (
-                   <div className="flex flex-col items-center justify-center p-8 border border-cinema-800 border-dashed rounded-xl bg-cinema-900/50">
-                     <Loader2 className="w-8 h-8 text-fuchsia-500 animate-spin mb-3" />
-                     <span className="text-gray-400 text-sm">Generating concept art with Imagen 3...</span>
-                   </div>
-                ) : state.locationVisualizer.data && Object.keys(state.locationVisualizer.data).length > 0 ? (
-                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                     {Object.entries(state.locationVisualizer.data).map(([loc, imgData]) => (
-                       <div key={loc} className="relative group rounded-lg overflow-hidden border border-cinema-700 bg-cinema-800 aspect-video">
-                         <img src={imgData} alt={loc} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
-                         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent flex items-end p-3 opacity-90 group-hover:opacity-100 transition-opacity">
-                           <span className="text-xs font-bold text-white truncate drop-shadow-md">{loc}</span>
-                         </div>
-                       </div>
-                     ))}
-                     {state.locationVisualizer.status === 'running' && (
-                       <div className="flex items-center justify-center border border-cinema-800 border-dashed rounded-lg bg-cinema-900/50 aspect-video">
-                         <Loader2 className="w-6 h-6 text-fuchsia-500 animate-spin" />
-                       </div>
-                     )}
-                   </div>
-                ) : state.locationVisualizer.status === 'error' ? (
-                   <div className="text-sm text-rose-400 italic p-4 bg-rose-500/10 rounded-lg border border-rose-500/20">Failed to generate concept art.</div>
-                ) : (
-                   <div className="text-sm text-gray-500 italic p-4">No locations extracted or generation pending...</div>
                 )}
               </div>
             </div>
@@ -435,27 +403,57 @@ export const ResultsDashboard: React.FC<Props> = ({ state, error, onRecheck }) =
         {activeTab === 'risks' && state.riskAnalyst.data && (
           <div className="space-y-4 animate-in fade-in duration-500">
             {state.riskAnalyst.data.length > 0 ? (
-              state.riskAnalyst.data.map((risk, idx) => (
-                <div key={idx} className={`bg-cinema-900 p-5 rounded-xl border-l-4 shadow-md flex flex-col md:flex-row gap-4 ${
-                  risk.severity === 'High' ? 'border-l-rose-500 border-y border-r border-cinema-800' : 
-                  risk.severity === 'Medium' ? 'border-l-amber-500 border-y border-r border-cinema-800' : 'border-l-emerald-500 border-y border-r border-cinema-800'
-                }`}>
-                  <div className="md:w-1/3 shrink-0">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className={`text-[10px] px-2 py-0.5 rounded font-black uppercase tracking-wider ${
-                        risk.severity === 'High' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 
-                        risk.severity === 'Medium' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                      }`}>{risk.severity} RISK</span>
+              state.riskAnalyst.data.map((risk, idx) => {
+                const isResolved = risk.status === 'Resolved';
+                return (
+                  <div key={risk.id || idx} className={`bg-cinema-900 p-5 rounded-xl border-l-4 shadow-md flex flex-col gap-4 transition-all ${
+                    isResolved ? 'opacity-60 border-l-gray-600 bg-cinema-900/50' : 
+                    risk.severity === 'High' ? 'border-l-rose-500 border-y border-r border-cinema-800' : 
+                    risk.severity === 'Medium' ? 'border-l-amber-500 border-y border-r border-cinema-800' : 'border-l-emerald-500 border-y border-r border-cinema-800'
+                  }`}>
+                    <div className="flex flex-col md:flex-row gap-4">
+                      <div className="md:w-1/3 shrink-0">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className={`text-[10px] px-2 py-0.5 rounded font-black uppercase tracking-wider ${
+                            isResolved ? 'bg-gray-500/20 text-gray-400 border border-gray-500/30' :
+                            risk.severity === 'High' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 
+                            risk.severity === 'Medium' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                          }`}>{risk.severity} RISK</span>
+                          {isResolved && <span className="text-[10px] px-2 py-0.5 rounded font-black uppercase tracking-wider bg-cinema-700 text-gray-300 border border-cinema-600">Resolved</span>}
+                        </div>
+                        <h4 className={`font-bold text-lg leading-tight mb-2 ${isResolved ? 'text-gray-400 line-through decoration-gray-600' : 'text-gray-100'}`}>{risk.description}</h4>
+                        {!isResolved && <p className="text-xs text-gray-500 font-medium">Affected Scenes: <span className="text-gray-300">{risk.affectedScenes.join(', ')}</span></p>}
+                      </div>
+                      {!isResolved && (
+                        <div className="md:w-2/3 bg-cinema-800/40 p-4 rounded-lg border border-cinema-700/50 flex flex-col justify-center">
+                          <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold mb-1.5 flex items-center"><CheckCircle2 className="w-3 h-3 mr-1 text-emerald-500"/> Mitigation Strategy</span>
+                          <p className="text-sm text-gray-300 leading-relaxed">{risk.mitigation}</p>
+                        </div>
+                      )}
                     </div>
-                    <h4 className="font-bold text-gray-100 text-lg leading-tight mb-2">{risk.description}</h4>
-                    <p className="text-xs text-gray-500 font-medium">Affected Scenes: <span className="text-gray-300">{risk.affectedScenes.join(', ')}</span></p>
+                    
+                    {/* Status & Note Controls */}
+                    <div className="mt-2 pt-3 border-t border-cinema-800 flex items-center gap-3">
+                      <select 
+                        value={risk.status} 
+                        onChange={(e) => onUpdateRisk(risk.id, e.target.value as any, risk.resolutionNote)}
+                        className="bg-cinema-800 border border-cinema-600 text-xs rounded px-2 py-1.5 text-gray-200 focus:outline-none focus:border-blue-500"
+                      >
+                        <option value="Open">Open</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Resolved">Resolved</option>
+                      </select>
+                      <input 
+                        type="text" 
+                        placeholder="Add resolution note (e.g. 'Permits Coordinator assigned')..." 
+                        defaultValue={risk.resolutionNote || ''}
+                        onBlur={(e) => onUpdateRisk(risk.id, risk.status, e.target.value)}
+                        className="flex-1 bg-cinema-800/50 border border-cinema-700 rounded px-3 py-1.5 text-xs text-gray-300 focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
                   </div>
-                  <div className="md:w-2/3 bg-cinema-800/40 p-4 rounded-lg border border-cinema-700/50 flex flex-col justify-center">
-                    <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold mb-1.5 flex items-center"><CheckCircle2 className="w-3 h-3 mr-1 text-emerald-500"/> Mitigation Strategy</span>
-                    <p className="text-sm text-gray-300 leading-relaxed">{risk.mitigation}</p>
-                  </div>
-                </div>
-              ))
+                );
+              })
             ) : (
               <div className="flex flex-col items-center justify-center p-12 bg-cinema-900/50 rounded-xl border border-cinema-800 border-dashed">
                 <CheckCircle2 className="w-12 h-12 text-emerald-500 mb-4 opacity-50" />
@@ -595,17 +593,23 @@ export const ResultsDashboard: React.FC<Props> = ({ state, error, onRecheck }) =
                             </div>
                           </div>
 
-                          {report.newRisks.length > 0 && (
+                          {report.newOrReopenedRisks && report.newOrReopenedRisks.length > 0 && (
                             <div>
-                              <h4 className="font-bold text-gray-300 uppercase tracking-wider mb-4 flex items-center text-sm"><ShieldAlert className="w-4 h-4 mr-2 text-amber-400"/> New Risks Introduced</h4>
+                              <h4 className="font-bold text-gray-300 uppercase tracking-wider mb-4 flex items-center text-sm"><ShieldAlert className="w-4 h-4 mr-2 text-amber-400"/> New or Reopened Risks</h4>
                               <div className="space-y-3">
-                                {report.newRisks.map((risk, idx) => (
+                                {report.newOrReopenedRisks.map((risk, idx) => (
                                   <div key={idx} className="bg-cinema-900 p-4 rounded-xl border-l-4 border-amber-500 border-y border-r border-cinema-700 shadow-md">
-                                    <p className="text-sm text-gray-100 font-bold mb-2">{risk.description}</p>
-                                    <div className="bg-cinema-800/50 p-2.5 rounded border border-cinema-700/50">
+                                    <div className="flex justify-between items-start mb-2">
+                                      <p className="text-sm text-gray-100 font-bold">{risk.description}</p>
+                                      <span className="text-[10px] px-2 py-0.5 rounded font-black uppercase tracking-wider bg-amber-500/20 text-amber-400 border border-amber-500/30">{risk.status}</span>
+                                    </div>
+                                    <div className="bg-cinema-800/50 p-2.5 rounded border border-cinema-700/50 mb-2">
                                       <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold block mb-1">Mitigation</span>
                                       <p className="text-xs text-gray-300">{risk.mitigation}</p>
                                     </div>
+                                    {risk.resolutionNote && (
+                                      <p className="text-xs text-rose-400 italic">Note: {risk.resolutionNote}</p>
+                                    )}
                                   </div>
                                 ))}
                               </div>
