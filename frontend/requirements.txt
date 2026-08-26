@@ -1,0 +1,22 @@
+# =================================================================
+# StudioPilot Backend Dependencies
+# AUDIT CONFIRMATION: 
+# - ONLY Google Cloud / Gemini AI models are used.
+# - ONLY Google Agent Development Kit (ADK) is used for orchestration.
+# - NO OpenAI, Anthropic, AWS Bedrock, LangChain, LlamaIndex, or 
+#   other non-Google AI/Agent frameworks are included in this tree.
+# =================================================================
+
+# Google AI & Agent Tooling (Required by Hackathon Rules)
+google-genai>=0.1.1
+google-adk>=0.0.1
+google-cloud-aiplatform>=1.40.0
+
+# Partner Integration (Required by Hackathon Rules)
+parallel-web>=1.0.0
+
+# Standard Web/API Framework (No AI logic)
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.5.0
+python-dotenv>=1.0.1
