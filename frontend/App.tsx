@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Play, Clapperboard, Settings, Info, Loader2, Upload, File as FileIcon, FileText, X, Activity, Terminal, Radio } from 'lucide-react';
+import { Play, Clapperboard, Settings, Info, Loader2, Upload, File as FileIcon, FileText, X, Activity, Terminal, Radio, RotateCcw } from 'lucide-react';
 import { PipelineState, FileData, SearchLog, ActivityLog, RiskStatus } from './types.ts';
 import { ResultsDashboard } from './components/ResultsDashboard.tsx';
 import { AgentStatusBadge } from './components/AgentStatusBadge.tsx';
@@ -148,6 +148,16 @@ export default function App() {
       };
     });
   }, []);
+
+  const handleReset = useCallback(() => {
+    setPipelineState(INITIAL_STATE);
+    setActivityLogs([]);
+    setGlobalError(null);
+    setIsRunning(false);
+    localStorage.removeItem('studiopilot_state');
+    localStorage.removeItem('studiopilot_research');
+    addLog('System', 'Pipeline reset to initial state.', 'info');
+  }, [addLog]);
 
   const runPipeline = useCallback(async () => {
     if (!scriptText.trim() && !uploadedFile) return;
@@ -327,17 +337,27 @@ export default function App() {
               </div>
             )}
 
-            <button
-              onClick={runPipeline}
-              disabled={isRunning || (!scriptText.trim() && !uploadedFile)}
-              className="w-full bg-studio-accent hover:bg-[#00C4EB] disabled:bg-studio-800 disabled:text-gray-500 disabled:border-studio-700 text-studio-950 font-bold py-3.5 px-4 rounded-xl transition-all flex items-center justify-center shadow-[0_0_20px_rgba(0,229,255,0.3)] disabled:shadow-none border border-transparent uppercase tracking-widest text-xs"
-            >
-              {isRunning ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processing...</>
-              ) : (
-                <><Play className="w-4 h-4 mr-2 fill-current" /> Run ADK Pipeline</>
-              )}
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={runPipeline}
+                disabled={isRunning || (!scriptText.trim() && !uploadedFile)}
+                className="flex-1 bg-studio-accent hover:bg-[#00C4EB] disabled:bg-studio-800 disabled:text-gray-500 disabled:border-studio-700 text-studio-950 font-bold py-3.5 px-4 rounded-xl transition-all flex items-center justify-center shadow-[0_0_20px_rgba(0,229,255,0.3)] disabled:shadow-none border border-transparent uppercase tracking-widest text-xs"
+              >
+                {isRunning ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processing...</>
+                ) : (
+                  <><Play className="w-4 h-4 mr-2 fill-current" /> Run ADK Pipeline</>
+                )}
+              </button>
+              <button
+                onClick={handleReset}
+                disabled={isRunning || pipelineState.scriptAnalyst.status === 'idle'}
+                className="bg-studio-800 hover:bg-studio-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-300 px-4 rounded-xl transition-all border border-studio-700 flex items-center justify-center"
+                title="Reset Pipeline"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           {/* Agent Status Overview */}
