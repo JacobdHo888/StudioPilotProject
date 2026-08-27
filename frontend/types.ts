@@ -1,94 +1,98 @@
-export interface Scene {
-  sceneNumber: string;
-  heading: string;
-  setting: string;
-  timeOfDay: string;
-  summary: string;
-  characters: string[];
-  locations: string[];
-  props: string[];
-  specialRequirements: string[];
-  dependencies: string[];
+export type EventType = 
+    | 'SYS_INIT' 
+    | 'EMAIL_INTERCEPTED' 
+    | 'TRIAGE_PASSED'
+    | 'TRIAGE_REJECTED'
+    | 'SANITIZATION_PASSED'
+    | 'SANITIZATION_FAILED'
+    | 'EXTRACTION_ATTEMPTED' 
+    | 'VERIFICATION_RETURNED' 
+    | 'LEDGER_UPDATED' 
+    | 'ACTION_TAKEN' 
+    | 'WATCHDOG_ESCALATION'
+    | 'CALENDAR_EVENT_CREATED'
+    | 'DRAFT_COMPOSED'
+    | 'ACTION_FAILED'
+    | 'DIGEST_GENERATED'
+    | 'REVIEW_RESOLVED';
+
+export type AgentType = 
+    | 'SYSTEM' 
+    | 'GMAIL_LISTENER' 
+    | 'TRIAGE_FILTER'
+    | 'SANITIZER'
+    | 'EXTRACTOR' 
+    | 'VERIFIER' 
+    | 'LEDGER_CLERK' 
+    | 'DISPATCHER' 
+    | 'WATCHDOG'
+    | 'CALENDAR_TOOL'
+    | 'DRAFT_COMPOSER'
+    | 'DIGEST_AGENT';
+
+export interface ExtractorPayload {
+    task_type: string;
+    platform: string;
+    deadline: string;
+    pay_amount: number | null;
+    pay_currency: string;
+    confidence_note: string;
 }
 
-export interface SearchLog {
-  query: string;
-  category: string;
-  result: string;
-  timestamp: number;
+export interface VerifierPayload {
+    verdict: 'CONFIRMED' | 'NEEDS_REVIEW' | 'REJECTED';
+    reason: string;
 }
 
-export interface ResearchItem {
-  topic: string;
-  query: string;
-  simulatedFindings: string;
-  relevance: string;
-  sourceUrl: string;
-  excerpt: string;
-  timestamp: string;
-  status: 'success' | 'timeout' | 'error';
+export interface DispatchEvent {
+    id: string;
+    timestamp: string;
+    type: EventType;
+    agent: AgentType;
+    message: string;
+    payload?: any;
+    
+    // OpenTelemetry Tracing Fields
+    trace_id?: string;
+    task_id?: string;
+    span_id?: string;
+    parent_span_id?: string;
+    duration_ms?: number;
 }
 
-export interface ShootDay {
-  dayNumber: number;
-  locations: string[];
-  scenes: string[];
-  estimatedHours: number;
-  notes: string;
+export interface LedgerTotal {
+    category: string;
+    count: number;
+    value: number;
 }
 
-export type RiskStatus = 'Open' | 'In Progress' | 'Resolved';
-
-export interface Risk {
-  id: string;
-  description: string;
-  severity: 'Low' | 'Medium' | 'High';
-  mitigation: string;
-  affectedScenes: string[];
-  status: RiskStatus;
-  resolutionNote?: string;
+export interface ReviewQueueItem {
+    id: string;
+    taskId: string;
+    timestamp: string;
+    reason: string;
+    status: 'PENDING' | 'RESOLVED';
+    verdict?: string;
 }
 
-export interface ChangedFact {
-  topic: string;
-  previousFinding: string;
-  newFinding: string;
-  sourceUrl: string;
-  excerpt: string;
-  timestamp: string;
-  affectedScenes: string[];
+// --- FIRESTORE SCHEMA DEFINITIONS ---
+
+export interface TaskDocument {
+    task_id: string;
+    platform: string;
+    task_type: string;
+    deadline: string;
+    pay_amount: number;
+    pay_currency: string;
+    status: 'PENDING' | 'CONFIRMED' | 'REJECTED' | 'ACTION_FAILED';
+    email_id: string;
+    verifier_verdict: string;
+    created_at: string;
 }
 
-export interface ChangeReport {
-  id?: string;
-  timestamp?: number;
-  changeReason: string;
-  changedFacts: ChangedFact[];
-  updatedPlan: ShootDay[];
-  updatedRisks: Risk[];
-  newOrReopenedRisks: Risk[];
-}
-
-export type AgentStatus = 'idle' | 'running' | 'completed' | 'error';
-
-export interface PipelineState {
-  scriptAnalyst: { status: AgentStatus; data: Scene[] | null; error?: string };
-  researchAgent: { status: AgentStatus; data: ResearchItem[] | null; logs: SearchLog[]; error?: string };
-  productionPlanner: { status: AgentStatus; data: ShootDay[] | null; error?: string };
-  riskAnalyst: { status: AgentStatus; data: Risk[] | null; error?: string };
-  changeMonitor: { status: AgentStatus; data: ChangeReport | null; history: ChangeReport[]; error?: string };
-}
-
-export interface FileData {
-  name: string;
-  mimeType: string;
-  data: string; // base64 encoded data
-}
-
-export interface ActivityLog {
-  id: string;
-  timestamp: Date;
-  agent: string;
-  message: string;
-  type: 'info' | 'success' | 'warning' | 'error' | 'request';
+export interface LedgerDocument {
+    platform: string;
+    tasks_completed: number;
+    pending_pay: number;
+    confirmed_pay: number;
 }
