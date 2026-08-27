@@ -1,83 +1,88 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>StudioPilot - AI Production Coordinator</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FrictionForge - Dispatch Console</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              studio: {
-                950: '#050507', // Deepest slate/black
-                900: '#0B0C10', // Panel background
-                800: '#15171E', // Card background
-                700: '#22252E', // Borders
-                600: '#333845', // Lighter borders/text
-                accent: '#00E5FF', // Cinematic Cyan
-                gold: '#FFB300', // Cinematic Amber
-                danger: '#FF3366', // Neon Red
-                success: '#00E676' // Neon Green
-              }
-            },
-            fontFamily: {
-              sans: ['Inter', 'sans-serif'],
-              mono: ['"JetBrains Mono"', 'monospace'],
-              script: ['"Courier Prime"', 'monospace']
-            },
-            backgroundImage: {
-              'warning-stripes': 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255, 51, 102, 0.1) 10px, rgba(255, 51, 102, 0.1) 20px)',
-              'warning-stripes-amber': 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255, 179, 0, 0.1) 10px, rgba(255, 179, 0, 0.1) 20px)',
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        vulcan: {
+                            950: '#0f172a', // Slate 900 - Deepest background
+                            900: '#1e293b', // Slate 800 - App container
+                            800: '#334155', // Slate 700 - Panels, headers
+                            700: '#475569', // Slate 600 - Borders
+                            600: '#64748b', // Slate 500 - Muted elements
+                            500: '#94a3b8', // Slate 400 - Secondary text/icons
+                            400: '#cbd5e1', // Slate 300 - Primary muted text
+                            300: '#e2e8f0', // Slate 200 - Highlight text
+                            100: '#f8fafc', // Slate 50  - Brightest text
+                        },
+                        status: {
+                            green: '#10b981',   // Confirmed / Success
+                            amber: '#f59e0b',   // Pending / Needs Review / Extraction
+                            red: '#ef4444',     // Anomalies / Rejections / Failures
+                            purple: '#d946ef',  // Ledger / Financial
+                            blue: '#3b82f6',    // Actions
+                            cyan: '#06b6d4',    // Intercepts
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', "Liberation Mono", "Courier New", 'monospace'],
+                        sans: ['ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
+                    },
+                    animation: {
+                        'log-pulse': 'logPulse 1.5s ease-out forwards',
+                        'ledger-flash': 'ledgerFlash 1.5s ease-out forwards',
+                    },
+                    keyframes: {
+                        logPulse: {
+                            '0%': { backgroundColor: 'rgba(255, 255, 255, 0.1)', boxShadow: 'inset 2px 0 0 0 rgba(255,255,255,0.6)' },
+                            '100%': { backgroundColor: 'transparent', boxShadow: 'inset 0 0 0 0 transparent' },
+                        },
+                        ledgerFlash: {
+                            '0%': { borderColor: '#d946ef', boxShadow: 'inset 0 0 30px rgba(217, 70, 239, 0.2), 0 0 15px rgba(217, 70, 239, 0.3)' },
+                            '100%': { borderColor: '#475569', boxShadow: 'none' },
+                        }
+                    }
+                }
             }
-          }
         }
-      }
     </script>
         <style>
-      /* Custom Scrollbar for a sleeker look */
-      ::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-      }
-      ::-webkit-scrollbar-track {
-        background: #050507; 
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #22252E; 
-        border-radius: 3px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #333845; 
-      }
-      .hud-corners {
-        position: relative;
-      }
-      .hud-corners::before, .hud-corners::after {
-        content: '';
-        position: absolute;
-        width: 8px;
-        height: 8px;
-        border-color: #00E5FF;
-        border-style: solid;
-        opacity: 0.5;
-      }
-      .hud-corners::before {
-        top: 0; left: 0;
-        border-width: 2px 0 0 2px;
-      }
-      .hud-corners::after {
-        bottom: 0; right: 0;
-        border-width: 0 2px 2px 0;
-      }
+        body { 
+            background-color: #0f172a; 
+            color: #f8fafc; 
+            overflow: hidden; 
+        }
+        /* Industrial scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        
+        /* Modern Monitoring Wall Grid Background */
+        .grid-bg {
+            background-image: 
+                linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+            background-size: 40px 40px;
+            background-position: center center;
+        }
+        
+        /* Subtle radial gradient to darken edges */
+        .vignette {
+            background: radial-gradient(circle at center, transparent 30%, rgba(15, 23, 42, 0.8) 100%);
+            pointer-events: none;
+        }
     </style>
-  </head>
-  <body class="bg-studio-950 text-gray-200 min-h-screen font-sans selection:bg-studio-accent selection:text-studio-950">
-    <div id="root"></div>
+</head>
+<body class="grid-bg">
+    <div class="fixed inset-0 vignette z-0"></div>
+    <div id="root" class="h-screen w-screen relative z-10"></div>
     <script type="module" src="./index.tsx"></script>
-  <script type="module" src="/index.js"></script></body>
+<script type="module" src="/index.js"></script></body>
 </html>
